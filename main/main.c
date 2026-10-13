@@ -4,8 +4,6 @@
 
 
 
-
-
 typedef struct {
     char id;
     int health;
@@ -18,7 +16,7 @@ typedef struct {
 typedef struct {
     char id;
     int durability;
-    int ammo;
+    int firepower;
     float xPos;
     float yPos;
     bool hasFuel;
@@ -28,7 +26,17 @@ typedef struct {
 
 
 int main(){
-    printf("Hello World!\n");
+    InitWindow(800, 600, "main window");
+    SetTargetFPS(60);
+
+    while (!WindowShouldClose()) {
+        BeginDrawing();
+        ClearBackground(BLACK);
+        DrawCircle(GetScreenWidth() / 2, GetScreenHeight() / 2, 50, RED);
+        EndDrawing();
+    }
+
+    CloseWindow();
     return 0;
 
 }
