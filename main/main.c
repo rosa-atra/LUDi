@@ -23,12 +23,6 @@ typedef struct {
 
 }starship;
 
-int cube(int side,int x, int y ){
-    DrawCircle(x-side,y,5,RED);
-    DrawCircle(x,y,5,RED);
-    DrawCircle(x,y+side,5,RED);
-    DrawCircle(x-side,y+side,5,RED);
-}
 
 int main(){
     InitWindow(800, 600, "main window");
