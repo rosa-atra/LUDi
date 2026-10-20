@@ -4,23 +4,27 @@
 
 
 int main(){
-    InitWindow(800, 600, "main window");
-    SetTargetFPS(60);
+    const int screenWidth = 800;
+    const int screenHeight = 450;
 
-    int xpos = GetScreenWidth() / 2 ;
-    int ypos = GetScreenHeight() / 2 ;
-    int sqside = 100;
+    InitWindow(screenWidth, screenHeight, "raylib ring example");
+
+    Vector2 center = { (float)screenWidth / 2.0f, (float)screenHeight / 2.0f };
+    float innerRadius = 80.0f;
+    float outerRadius = 190.0f;
+    float startAngle = 0.0f;
+    float endAngle = 360.0f;
+    int segments = 0;
+
+    SetTargetFPS(60);
 
     while (!WindowShouldClose()) {
         BeginDrawing();
-        ClearBackground(BLACK);
+        ClearBackground(RAYWHITE);
 
-        DrawCircle(xpos - sqside, ypos , 5, RED);
-        DrawCircle(xpos, ypos , 5, GREEN);
-        DrawCircle(xpos-sqside , ypos+sqside , 5, BLUE);
-        DrawCircle(xpos, ypos+sqside , 5, YELLOW);
-        xpos += 1;
-    
+        // Draw a full ring
+        DrawRing(center, innerRadius, outerRadius, startAngle, endAngle, segments, MAROON);
+
         EndDrawing();
     }
 
