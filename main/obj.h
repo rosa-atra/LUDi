@@ -17,3 +17,16 @@ typedef struct {
     bool hasFuel;
 
 }starship;
+
+typedef struct {
+    char* input;
+    char* output;
+
+}hman;
+
+
+int* compression(char* data){
+    while(data){
+
+    }
+}
