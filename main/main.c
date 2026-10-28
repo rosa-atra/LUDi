@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <raylib.h>
 #include <time.h>
+#include <math.h>
 #include "obj.h"
 #include "display_config.h"
 
@@ -36,6 +37,12 @@ int main(){
     const float speed = 100.0f;
     const float accel = 100.0f;
     bool quitGame = false;
+    bool boostActive = false;
+#if defined(PLATFORM_ANDROID)
+    bool touchMoved = false;
+    float touchHoldTime = 0.0f;
+    Vector2 touchPrevious = { 0.0f, 0.0f };
+#endif
 
     const int starCount = 100;
     Vector2 stars[starCount];
@@ -71,6 +78,42 @@ int main(){
         bool hover = CheckCollisionPointRec(mouse, quitButton);
         if (hover && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) quitGame = true;
 
+#if defined(PLATFORM_ANDROID)
+        bool touchDown = (GetTouchPointCount() > 0) || IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+        Vector2 touchPosition = GetTouchPosition(0);
+
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            touchPrevious = touchPosition;
+            touchHoldTime = 0.0f;
+            touchMoved = false;
+        }
+
+        if (touchDown && !hover) {
+            Vector2 touchDelta = {
+                touchPosition.x - touchPrevious.x,
+                touchPosition.y - touchPrevious.y
+            };
+
+            if (fabsf(touchDelta.x) >= 3.0f * display.scale || touchMoved) {
+                float newX = pos.x + touchDelta.x;
+                if ((newX >= 0.0f) && (newX <= screenWidth - (ship.width * display.scale))) pos.x = newX;
+                touchMoved = true;
+                touchHoldTime = 0.0f;
+            } else {
+                touchHoldTime += dt;
+            }
+
+            touchPrevious = touchPosition;
+        } else {
+            touchHoldTime = 0.0f;
+        }
+
+        boostActive = (touchDown && !touchMoved && (touchHoldTime >= 0.18f));
+#else
+        boostActive = false;
+#endif
+        boostActive = boostActive || IsKeyDown(KEY_W) || IsKeyDown(KEY_LEFT_SHIFT);
+
 
         if (IsKeyDown(KEY_D)) {
             if (pos.x >= screenWidth-64) pos.x = screenWidth-64;
@@ -101,7 +144,7 @@ int main(){
                 DrawTextureEx(farAmbience, stars[i], 0.0f, starScales[i], Fade(RED , 0.5f));
                 stars2[i].y  += 0.01f;
                 if (stars[i].y >= screenHeight) stars[i].y = 0.0f;
-                if (IsKeyDown(KEY_W) | IsKeyDown(KEY_LEFT_SHIFT)) stars[i].y  += dt * speed * 0.2 + 0.5 * accel * dt * dt;
+                if (boostActive) stars[i].y  += dt * speed * 0.2 + 0.5 * accel * dt * dt;
             }
 
             // 2nd layer stars
@@ -112,7 +155,7 @@ int main(){
                 stars2[i].y  += 0.2f;
                 if (stars2[i].y >= screenHeight) stars2[i].y = 0.0f;
 
-                if (IsKeyDown(KEY_W) | IsKeyDown(KEY_LEFT_SHIFT)) stars2[i].y  += dt * speed * 0.5 + 0.5 * accel * dt * dt;
+                if (boostActive) stars2[i].y  += dt * speed * 0.5 + 0.5 * accel * dt * dt;
             }
             // 3rd  layer stars
             for (int i = 0; i < starCount; i++) {
@@ -121,7 +164,7 @@ int main(){
 
                 stars3[i].y  += 0.6f;
                 if (stars3[i].y >= screenHeight) stars3[i].y = 0.0f;
-                if (IsKeyDown(KEY_W) | IsKeyDown(KEY_LEFT_SHIFT)) {
+                if (boostActive) {
                     stars3[i].y  += dt * speed * 0.6 + 0.5 * accel * dt * dt;
                 }
                 else{stars3[i].y  += dt * speed * 0.6 - 0.5 * accel * dt * dt;
@@ -132,7 +175,7 @@ int main(){
             // star ship
             DrawTextureEx(ship, pos, 0.0f, display.scale, WHITE);
             // ship thruster
-            if(IsKeyDown(KEY_W) | IsKeyDown(KEY_LEFT_SHIFT)) {
+            if (boostActive) {
                 DrawTextureEx(thrusterBoost, posT, 0.0f, display.scale, WHITE);
             }
             else {
