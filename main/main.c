@@ -182,7 +182,7 @@ int main(){
                 DrawTextureEx(thruster, posT, 0.0f, display.scale, WHITE);
             }
 
-            DrawFPS(10, 10);
+            DrawFPS(100, 10);
 
 
 
