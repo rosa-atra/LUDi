@@ -46,6 +46,7 @@ static inline float ScaleGameY(float y)
 static inline void InitGameDisplay(const char *title)
 {
 #if defined(PLATFORM_ANDROID)
+    SetConfigFlags(FLAG_FULLSCREEN_MODE | FLAG_VSYNC_HINT);
     InitWindow(0, 0, title); /* raylib uses the NativeActivity display size. */
 #else
     InitWindow(LUDI_DESIGN_WIDTH, LUDI_DESIGN_HEIGHT, title);
