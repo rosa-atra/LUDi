@@ -37,6 +37,7 @@ int main(){
     const float accel = 100.0f;
     bool quitGame = false;
     bool boostActive = false;
+    
 #if defined(PLATFORM_ANDROID)
     bool touchMoved = false;
     float touchHoldTime = 0.0f;
