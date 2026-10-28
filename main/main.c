@@ -18,7 +18,6 @@ int main(){
     SetTargetFPS(60);
 
 
-
     Texture2D thruster = LoadTexture(spriteTextures[SPRITE_EFFECT_YELLOW]);
     Texture2D thrusterBoost = LoadTexture(spriteTextures[SPRITE_EFFECT_PURPLE]);
     Texture2D ship = LoadTexture(shipTextures[SHIP_L]);
