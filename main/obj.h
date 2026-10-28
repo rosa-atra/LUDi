@@ -17,14 +17,28 @@ typedef struct {
 }Player;
 
 typedef struct {
+
     char id;
+    const char *bodyTexture;
+    const char *thrusterTexture;
     int durability;
     int firepower;
-    float xPos;
-    float yPos;
+    Vector2 pos;
+    int velocity;
     bool hasFuel;
 
 }Ship;
+
+
+void DrawShip(Ship* sp, Color col){
+
+    Texture2D thrust = LoadTexture(sp->thrusterTexture);
+    Texture2D body = LoadTexture(sp->bodyTexture);
+
+    DrawTexture( thrust, sp->pos.x-64, sp->pos.y-64, col);
+    DrawTexture(body, sp->pos.x, sp->pos.y, col);
+
+}
 
 // Ship texture paths. Paths are relative to the repository root.
 typedef enum {
@@ -392,7 +406,3 @@ static const char *const soundEffects[] = {
     "LUDi/main/assets/sfx/thrusterFire_003.ogg",
     "LUDi/main/assets/sfx/thrusterFire_004.ogg"
 };
-
-
-
-
