@@ -3,8 +3,7 @@
 #include <raylib.h>
 #include <time.h>
 #include "obj.h"
-#include "android_display.h"
-
+#include "display_config.h"
 
 
 int main(){
@@ -31,7 +30,7 @@ int main(){
     };
 
     Vector2 pos = { ScaleGameX(390.0f), ScaleGameY(450.0f) };
-    Vector2 posT = { ScaleGameX(390.0f), ScaleGameY(510.0f) };
+    Vector2 posT = { pos.x, pos.y + (60.0f * display.scale) };
     Vector2 icon = { (float)(screenWidth - display.quitSize), 0.0f };
 
     const float speed = 100.0f;
@@ -84,6 +83,9 @@ int main(){
             if (posT.x <= 0) posT.x = 0;
             pos.x -= speed * dt;
             posT.x -= speed * dt;}
+
+        posT.x = pos.x;
+        posT.y = pos.y + (60.0f * display.scale);
 
 
         BeginDrawing();
