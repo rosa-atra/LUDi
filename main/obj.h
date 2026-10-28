@@ -6,7 +6,7 @@ typedef struct {
     float xPos;
     float yPos;
     bool isAlive;
-}player;
+}Player;
 
 typedef struct {
     char id;
@@ -16,17 +16,4 @@ typedef struct {
     float yPos;
     bool hasFuel;
 
-}starship;
-
-typedef struct {
-    char* input;
-    char* output;
-
-}hman;
-
-
-int* compression(char* data){
-    while(data){
-
-    }
-}
+}Ship;
