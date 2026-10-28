@@ -1,59 +1,50 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <raylib.h>
+#include "obj.h"
 
-
-
-typedef unsigned char u8;
-typedef unsigned short u16;
-typedef unsigned int u32;
-typedef unsigned long u64;
-
-
-
-void rainfall(float x,float height, u32 drops){
-    for (u32 i = 0; i < drops; i++)
-    {
-        DrawCircle(x,height,1,WHITE);
-        x -= GetScreenWidth()/drops;
-   
-    }
-}
 
 
 int main(){
-    const u32 screenWidth = 800;
-    const u32 screenHeight = 600;
+    const dword screenWidth = 800;
+    const dword screenHeight = 600;
 
 
     InitWindow(screenWidth, screenHeight, "LUDi");
-
-
+    InitAudioDevice();
     SetTargetFPS(60);
 
 
+
+    Texture2D ship = LoadTexture(shipTextures[SHIP_L]);
+
+
+
+    Vector2 pos = { 400, 225 };
+    const float speed = 200.0f;
+
+
     while (!WindowShouldClose()) {
+        float dt = GetFrameTime();
+        
+
+        if (IsKeyDown(KEY_D)) pos.x += speed * dt;
+        if (IsKeyDown(KEY_A))  pos.x -= speed * dt;
+        if (IsKeyDown(KEY_S))  pos.y += speed * dt;
+        if (IsKeyDown(KEY_W))    pos.y -= speed * dt;
+
         BeginDrawing();
-        ClearBackground(BLACK);
+            ClearBackground(BLACK);
+            DrawTextureV(ship, pos, WHITE);
+            DrawText("LUDi", 200, 50, 30, WHITE);
+            DrawFPS(10, 10);
 
-
-        if (IsKeyDown(KEY_A)){
-           
-        }
-        if (IsKeyDown(KEY_D)){
-            if (
-        }
-        if (IsKeyDown(KEY_W)){
-            
-        }
-        if (IsKeyDown(KEY_S)){
-            
-        }
 
         EndDrawing();
     }
 
-
+    UnloadTexture(ship);
+    CloseAudioDevice();
     CloseWindow();
     return 0;
 
