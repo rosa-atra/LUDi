@@ -17,23 +17,24 @@ int main(){
     InitAudioDevice();
     SetTargetFPS(60);
 
-
+// Textures and sprites
     Texture2D thruster = LoadTexture(spriteTextures[SPRITE_EFFECT_YELLOW]);
     Texture2D thrusterBoost = LoadTexture(spriteTextures[SPRITE_EFFECT_PURPLE]);
     Texture2D ship = LoadTexture(shipTextures[SHIP_L]);
     Texture2D farAmbience = LoadTexture(spriteTextures[SPRITE_STAR_TINY]);
     Texture2D crossButton = LoadTexture(spriteTextures[SPRITE_ICON_CROSS_SMALL]);
 
+//UI elements
     Rectangle quitButton = {
         (float)(screenWidth - display.quitSize), 0.0f,
         (float)display.quitSize, (float)display.quitSize
     };
 
-    Vector2 pos = { ScaleGameX(390.0f), ScaleGameY(450.0f) };
+    Vector2 pos = { ScaleGameX(screenWidth/2.0f), ScaleGameY(screenHeight/1.5f) };
     Vector2 posT = { pos.x, pos.y + (60.0f * display.scale) };
     Vector2 icon = { (float)(screenWidth - display.quitSize), 0.0f };
 
-    const float speed = 80.0f;
+    const float speed = 100.0f;
     const float accel = 100.0f;
     bool quitGame = false;
     bool boostActive = false;
@@ -42,6 +43,7 @@ int main(){
     bool touchMoved = false;
     float touchHoldTime = 0.0f;
     Vector2 touchPrevious = { 0.0f, 0.0f };
+    bool touchWasDown = false;
 #endif
 
     const int starCount = 100;
@@ -79,24 +81,28 @@ int main(){
         if (hover && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) quitGame = true;
 
 #if defined(PLATFORM_ANDROID)
-        bool touchDown = (GetTouchPointCount() > 0) || IsMouseButtonDown(MOUSE_BUTTON_LEFT);
-        Vector2 touchPosition = GetTouchPosition(0);
+        bool touchDown = GetTouchPointCount() > 0;
+        Vector2 touchPosition = touchDown ? GetTouchPosition(0) : (Vector2){ -1.0f, -1.0f };
+        bool touchHover = CheckCollisionPointRec(touchPosition, quitButton);
 
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        if (touchDown && !touchWasDown) {
             touchPrevious = touchPosition;
             touchHoldTime = 0.0f;
             touchMoved = false;
         }
 
-        if (touchDown && !hover) {
+        if (touchDown && !touchHover) {
             Vector2 touchDelta = {
                 touchPosition.x - touchPrevious.x,
                 touchPosition.y - touchPrevious.y
             };
 
-            if (fabsf(touchDelta.x) >= 3.0f * display.scale || touchMoved) {
+            if (touchMoved || fabsf(touchDelta.x) >= 3.0f * display.scale) {
                 float newX = pos.x + touchDelta.x;
-                if ((newX >= 0.0f) && (newX <= screenWidth - (ship.width * display.scale))) pos.x = newX;
+                if ((newX >= 0.0f) && (newX <= screenWidth - (ship.width * display.scale))) {
+                    pos.x = newX;
+                    posT.x = pos.x;
+                }
                 touchMoved = true;
                 touchHoldTime = 0.0f;
             } else {
@@ -104,17 +110,18 @@ int main(){
             }
 
             touchPrevious = touchPosition;
-        } else {
+        } else if (!touchDown) {
             touchHoldTime = 0.0f;
         }
 
+        touchWasDown = touchDown;
         boostActive = (touchDown && !touchMoved && (touchHoldTime >= 0.18f));
 #else
         boostActive = false;
 #endif
         boostActive = boostActive || IsKeyDown(KEY_W) || IsKeyDown(KEY_LEFT_SHIFT);
 
-
+/*
         if (IsKeyDown(KEY_D)) {
             if (pos.x >= screenWidth-64) pos.x = screenWidth-64;
             if (posT.x >= screenWidth-64) posT.x = screenWidth-64;
@@ -130,7 +137,7 @@ int main(){
         posT.x = pos.x;
         posT.y = pos.y + (60.0f * display.scale);
 
-
+*/
         BeginDrawing();
             ClearBackground(BLACK);
 
@@ -142,10 +149,17 @@ int main(){
             for (int i = 0; i < starCount; i++) {
 
                 DrawTextureEx(farAmbience, stars[i], 0.0f, starScales[i], Fade(RED , 0.5f));
+
                 stars2[i].y  += 0.01f;
+
                 if (stars[i].y >= screenHeight) stars[i].y = 0.0f;
+                if (stars[i].x < 0) stars[i].x = screenWidth;
+                if (stars[i].x > screenWidth) stars[i].x = 0.0f;
+
                 if (boostActive) stars[i].y  += dt * speed * 0.2 + 0.5 * accel * dt * dt;
-            }
+                if (IsKeyDown(KEY_A))stars[i].x += dt * speed * 0.2;
+                if (IsKeyDown(KEY_D))stars[i].x -= dt * speed * 0.2;
+             }
 
             // 2nd layer stars
              for (int i = 0; i < starCount; i++) {
@@ -153,9 +167,14 @@ int main(){
                 DrawTextureEx(farAmbience, stars2[i], 0.0f, starScales[i], WHITE);
 
                 stars2[i].y  += 0.2f;
-                if (stars2[i].y >= screenHeight) stars2[i].y = 0.0f;
 
-                if (boostActive) stars2[i].y  += dt * speed * 0.5 + 0.5 * accel * dt * dt;
+                if (stars2[i].y >= screenHeight) stars2[i].y = 0.0f;
+                if (stars2[i].x < 0) stars2[i].x = screenWidth;
+                if (stars2[i].x > screenWidth) stars2[i].x = 0.0f;
+
+                if (boostActive) stars2[i].y  += dt * speed * 0.4 + 0.5 * accel * dt * dt;
+                if (IsKeyDown(KEY_A))stars2[i].x += dt * speed * 0.4;
+                if (IsKeyDown(KEY_D))stars2[i].x -= dt * speed * 0.4;
             }
             // 3rd  layer stars
             for (int i = 0; i < starCount; i++) {
@@ -163,11 +182,15 @@ int main(){
                 DrawTextureEx(farAmbience, stars3[i], 0.0f, starScales[i], WHITE);
 
                 stars3[i].y  += 0.6f;
+
                 if (stars3[i].y >= screenHeight) stars3[i].y = 0.0f;
+                if (stars3[i].x < 0) stars3[i].x = screenWidth;
+                if (stars3[i].x > screenWidth) stars3[i].x = 0.0f;
+
+                if (IsKeyDown(KEY_A))stars3[i].x += dt * speed * 0.6;
+                if (IsKeyDown(KEY_D))stars3[i].x -= dt * speed * 0.6;
                 if (boostActive) {
                     stars3[i].y  += dt * speed * 0.6 + 0.5 * accel * dt * dt;
-                }
-                else{stars3[i].y  += dt * speed * 0.6 - 0.5 * accel * dt * dt;
                 }
             }
 
