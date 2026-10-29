@@ -3,8 +3,8 @@
 
 #include <raylib.h>
 
-#define LUDI_DESIGN_WIDTH 800
-#define LUDI_DESIGN_HEIGHT 600
+#define LUDI_DESIGN_WIDTH 1280
+#define LUDI_DESIGN_HEIGHT 720
 
 typedef struct {
     int width;

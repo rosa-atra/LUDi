@@ -33,7 +33,7 @@ int main(){
     Vector2 posT = { pos.x, pos.y + (60.0f * display.scale) };
     Vector2 icon = { (float)(screenWidth - display.quitSize), 0.0f };
 
-    const float speed = 60.0f;
+    const float speed = 80.0f;
     const float accel = 100.0f;
     bool quitGame = false;
     bool boostActive = false;
