@@ -23,7 +23,7 @@ int main(){
     Texture2D ship = LoadTexture(shipTextures[SHIP_L]);
     Texture2D farAmbience = LoadTexture(spriteTextures[SPRITE_STAR_TINY]);
     Texture2D crossButton = LoadTexture(spriteTextures[SPRITE_ICON_CROSS_SMALL]);
-    //Texture2D meteor = LoadTexture(spriteTextures[SPRITE_METEOR_DETAILED_LARGE]);
+    Texture2D meteorText = LoadTexture(spriteTextures[SPRITE_METEOR_DETAILED_LARGE]);
     Texture2D health = LoadTexture(shipTextures[SHIP_B]);
 
 //UI elements
@@ -32,7 +32,10 @@ int main(){
         (float)display.quitSize, (float)display.quitSize
     };
 
-    Vector2 pos = { ScaleGameX(screenWidth/2.0f), ScaleGameY(screenHeight/1.5f) };
+    Vector2 pos = {
+        (screenWidth * 0.5f) - (ship.width * display.scale * 0.5f),
+        (screenHeight * (2.0f / 3.0f)) - (ship.height * display.scale * 0.5f)
+    };
     Vector2 posT = { pos.x, pos.y + (60.0f * display.scale) };
     Vector2 icon = { (float)(screenWidth - display.quitSize), 0.0f };
     Vector2 healpos = {0.0f , 0.0f};
@@ -50,9 +53,13 @@ int main(){
 #endif
 
     const int starCount = 100;
+    const int meteorCount = 20;
+
     Vector2 stars[starCount];
     Vector2 stars2[starCount];
     Vector2 stars3[starCount];
+    Vector2 meteor[meteorCount];
+    float meteorScale[meteorCount];
     float starScales[starCount];
 
     for (int i = 0; i < starCount; i++) {
@@ -71,6 +78,12 @@ int main(){
         stars3[i].x = (float)GetRandomValue(0, screenWidth - 1);
         stars3[i].y = (float)GetRandomValue(0, screenHeight - 1);
         starScales[i] = (float)GetRandomValue(15, 20) / 100.0f;
+    }
+
+    for (int i = 0; i < meteorCount; i++) {
+        meteor[i].x = (float)GetRandomValue(0, screenWidth - 1);
+        meteor[i].y = (float)GetRandomValue(0, screenHeight - 1);
+        meteorScale[i] = (float)GetRandomValue(90, 100) / 100.0f;
     }
 
 
@@ -130,8 +143,7 @@ int main(){
         BeginDrawing();
             ClearBackground(BLACK);
 
-            //DrawRectangleRec(quitButton, hover ? Fade(RED, 0.35f) : Fade(GRAY, 0.01f));
-            DrawTextureEx(crossButton, icon, 0.0f, display.scale, hover ? RED : WHITE);
+           
 
 
             //1st layer stars
@@ -183,6 +195,21 @@ int main(){
                 }
             }
 
+            for (int i = 0; i < meteorCount; i++) {
+
+                DrawTextureEx(meteorText, meteor[i], 0.0f, meteorScale[i], GRAY);
+
+                meteor[i].y  += 1.0f;
+
+                if (meteor[meteorCount - i].y > screenHeight + 64) meteor[meteorCount - i].y = -64.0f;
+                if (meteor[meteorCount - i].x <= -64) meteor[meteorCount - i].x = screenWidth;
+                if (meteor[meteorCount - i].x > screenWidth) meteor[meteorCount - i].x = - 64.0f;
+
+                if (boostActive) meteor[i].y  += dt * speed + 0.5 * accel * dt * dt;
+                if (IsKeyDown(KEY_A))meteor[i].x += dt * speed;
+                if (IsKeyDown(KEY_D))meteor[i].x -= dt * speed;
+             }
+
 
             // star ship
             DrawTextureEx(ship, pos, 0.0f, display.scale, WHITE);
@@ -195,10 +222,14 @@ int main(){
             }
 
 
-            for (int i = 0; i < 3; i++){
+            for (int i = 0; i < 7; i++){
                 DrawTextureV(health,healpos, WHITE);
                 healpos.x = i*36;
             }
+
+
+             //DrawRectangleRec(quitButton, hover ? Fade(RED, 0.35f) : Fade(GRAY, 0.01f));
+            DrawTextureEx(crossButton, icon, 0.0f, display.scale, hover ? RED : WHITE);
         
 
         EndDrawing();
@@ -209,6 +240,8 @@ int main(){
     UnloadTexture(thrusterBoost);
     UnloadTexture(farAmbience);
     UnloadTexture(crossButton);
+    UnloadTexture(meteorText);
+    UnloadTexture(health);
     CloseAudioDevice();
     CloseWindow();
     return 0;
