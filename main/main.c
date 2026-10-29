@@ -44,6 +44,9 @@ int main(){
     const float accel = 100.0f;
     bool quitGame = false;
     bool boostActive = false;
+    int shipHealth = 7;
+    const int maxShipHealth = 7;
+    float collisionCooldown = 0.0f;
 
 #if defined(PLATFORM_ANDROID)
     bool touchMoved = false;
@@ -90,6 +93,7 @@ int main(){
     while (!WindowShouldClose() && !quitGame) {
 
         float dt = GetFrameTime();
+        if (collisionCooldown > 0.0f) collisionCooldown -= dt;
 
 
         Vector2 mouse = GetMousePosition();
@@ -200,14 +204,34 @@ int main(){
                 DrawTextureEx(meteorText, meteor[i], 0.0f, meteorScale[i], GRAY);
 
                 meteor[i].y  += 1.0f;
-
-                if (meteor[meteorCount - i].y > screenHeight + 64) meteor[meteorCount - i].y = -64.0f;
-                if (meteor[meteorCount - i].x <= -64) meteor[meteorCount - i].x = screenWidth;
-                if (meteor[meteorCount - i].x > screenWidth) meteor[meteorCount - i].x = - 64.0f;
+                if (meteor[i].y > screenHeight + 64) meteor[i].y = -64.0f;
+                if (meteor[i].x <= -64) meteor[i].x = screenWidth;
+                if (meteor[i].x > screenWidth) meteor[i].x = -64.0f;
 
                 if (boostActive) meteor[i].y  += dt * speed + 0.5 * accel * dt * dt;
                 if (IsKeyDown(KEY_A))meteor[i].x += dt * speed;
                 if (IsKeyDown(KEY_D))meteor[i].x -= dt * speed;
+
+                Rectangle shipBounds = {
+                    pos.x,
+                    pos.y,
+                    ship.width * display.scale,
+                    ship.height * display.scale
+                };
+                Rectangle meteorBounds = {
+                    meteor[i].x,
+                    meteor[i].y,
+                    meteorText.width * meteorScale[i],
+                    meteorText.height * meteorScale[i]
+                };
+
+                if ((shipHealth > 0) && (collisionCooldown <= 0.0f) &&
+                    CheckCollisionRecs(shipBounds, meteorBounds)) {
+                    shipHealth--;
+                    collisionCooldown = 1.0f;
+                    meteor[i].y = -64.0f;
+                    meteor[i].x = (float)GetRandomValue(0, screenWidth - 1);
+                }
              }
 
 
@@ -222,9 +246,12 @@ int main(){
             }
 
 
-            for (int i = 0; i < 7; i++){
-                DrawTextureV(health,healpos, WHITE);
-                healpos.x = i*36;
+            healpos.x = 0.0f;
+            for (int i = 0; i < maxShipHealth; i++){
+                if (i < shipHealth) {
+                    DrawTextureV(health, healpos, WHITE);
+                }
+                healpos.x = (i + 1) * 36.0f;
             }
 
 
