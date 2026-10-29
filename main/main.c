@@ -23,6 +23,8 @@ int main(){
     Texture2D ship = LoadTexture(shipTextures[SHIP_L]);
     Texture2D farAmbience = LoadTexture(spriteTextures[SPRITE_STAR_TINY]);
     Texture2D crossButton = LoadTexture(spriteTextures[SPRITE_ICON_CROSS_SMALL]);
+    //Texture2D meteor = LoadTexture(spriteTextures[SPRITE_METEOR_DETAILED_LARGE]);
+    Texture2D health = LoadTexture(shipTextures[SHIP_B]);
 
 //UI elements
     Rectangle quitButton = {
@@ -33,6 +35,7 @@ int main(){
     Vector2 pos = { ScaleGameX(screenWidth/2.0f), ScaleGameY(screenHeight/1.5f) };
     Vector2 posT = { pos.x, pos.y + (60.0f * display.scale) };
     Vector2 icon = { (float)(screenWidth - display.quitSize), 0.0f };
+    Vector2 healpos = {0.0f , 0.0f};
 
     const float speed = 100.0f;
     const float accel = 100.0f;
@@ -57,6 +60,7 @@ int main(){
         stars[i].y = (float)GetRandomValue(0, screenHeight - 1);
         starScales[i] = (float)GetRandomValue(2, 8) / 100.0f;
     }
+
       for (int i = 0; i < starCount; i++) {
         stars2[i].x = (float)GetRandomValue(0, screenWidth - 1);
         stars2[i].y = (float)GetRandomValue(0, screenHeight - 1);
@@ -69,16 +73,17 @@ int main(){
         starScales[i] = (float)GetRandomValue(15, 20) / 100.0f;
     }
 
-    
-
 
     while (!WindowShouldClose() && !quitGame) {
 
         float dt = GetFrameTime();
 
+
         Vector2 mouse = GetMousePosition();
         bool hover = CheckCollisionPointRec(mouse, quitButton);
         if (hover && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) quitGame = true;
+
+       
 
 #if defined(PLATFORM_ANDROID)
         bool touchDown = GetTouchPointCount() > 0;
@@ -121,23 +126,7 @@ int main(){
 #endif
         boostActive = boostActive || IsKeyDown(KEY_W) || IsKeyDown(KEY_LEFT_SHIFT);
 
-/*
-        if (IsKeyDown(KEY_D)) {
-            if (pos.x >= screenWidth-64) pos.x = screenWidth-64;
-            if (posT.x >= screenWidth-64) posT.x = screenWidth-64;
-            pos.x += speed * dt;
-            posT.x += speed * dt;}
 
-        if (IsKeyDown(KEY_A))  {
-            if (pos.x <= 0) pos.x = 0;
-            if (posT.x <= 0) posT.x = 0;
-            pos.x -= speed * dt;
-            posT.x -= speed * dt;}
-
-        posT.x = pos.x;
-        posT.y = pos.y + (60.0f * display.scale);
-
-*/
         BeginDrawing();
             ClearBackground(BLACK);
 
@@ -205,9 +194,12 @@ int main(){
                 DrawTextureEx(thruster, posT, 0.0f, display.scale, WHITE);
             }
 
-            DrawFPS(100, 10);
 
-
+            for (int i = 0; i < 3; i++){
+                DrawTextureV(health,healpos, WHITE);
+                healpos.x = i*36;
+            }
+        
 
         EndDrawing();
     }

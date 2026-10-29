@@ -30,6 +30,14 @@ typedef struct {
 }Ship;
 
 
+typedef struct {
+    float xpos;
+    float ypos;
+    
+
+}Meteor;
+
+
 void DrawShip(Ship* sp, Color col){
 
     Texture2D thrust = LoadTexture(sp->thrusterTexture);
