@@ -16,6 +16,7 @@ int main(){
     SetRandomSeed((dword)time(NULL));
     InitAudioDevice();
     SetTargetFPS(60);
+    SetExitKey(KEY_NULL);
 
 // Textures and sprites
     Texture2D thruster = LoadTexture(spriteTextures[SPRITE_EFFECT_YELLOW]);
@@ -23,7 +24,16 @@ int main(){
     Texture2D ship = LoadTexture(shipTextures[SHIP_L]);
     Texture2D farAmbience = LoadTexture(spriteTextures[SPRITE_STAR_TINY]);
     Texture2D crossButton = LoadTexture(spriteTextures[SPRITE_ICON_CROSS_SMALL]);
-    Texture2D meteorText = LoadTexture(spriteTextures[SPRITE_METEOR_DETAILED_LARGE]);
+    Texture2D meteorTextures[8] = {
+        LoadTexture(spriteTextures[SPRITE_METEOR_DETAILED_LARGE]),
+        LoadTexture(spriteTextures[SPRITE_METEOR_DETAILED_SMALL]),
+        LoadTexture(spriteTextures[SPRITE_METEOR_LARGE]),
+        LoadTexture(spriteTextures[SPRITE_METEOR_SMALL]),
+        LoadTexture(spriteTextures[SPRITE_METEOR_SQUARE_DETAILED_LARGE]),
+        LoadTexture(spriteTextures[SPRITE_METEOR_SQUARE_DETAILED_SMALL]),
+        LoadTexture(spriteTextures[SPRITE_METEOR_SQUARE_LARGE]),
+        LoadTexture(spriteTextures[SPRITE_METEOR_SQUARE_SMALL])
+    };
     Texture2D health = LoadTexture(shipTextures[SHIP_B]);
 
 //UI elements
@@ -43,6 +53,7 @@ int main(){
     const float speed = 100.0f;
     const float accel = 100.0f;
     bool quitGame = false;
+    bool exitConfirmation = false;
     bool boostActive = false;
     int shipHealth = 7;
     const int maxShipHealth = 7;
@@ -51,6 +62,7 @@ int main(){
 #if defined(PLATFORM_ANDROID)
     bool touchMoved = false;
     float touchHoldTime = 0.0f;
+    float touchWorldOffset = 0.0f;
     Vector2 touchPrevious = { 0.0f, 0.0f };
     bool touchWasDown = false;
 #endif
@@ -63,6 +75,9 @@ int main(){
     Vector2 stars3[starCount];
     Vector2 meteor[meteorCount];
     float meteorScale[meteorCount];
+    int meteorTextureIndex[meteorCount];
+    float meteorRotation[meteorCount];
+    float meteorRotationSpeed[meteorCount];
     float starScales[starCount];
 
     for (int i = 0; i < starCount; i++) {
@@ -87,22 +102,65 @@ int main(){
         meteor[i].x = (float)GetRandomValue(0, screenWidth - 1);
         meteor[i].y = (float)GetRandomValue(0, screenHeight - 1);
         meteorScale[i] = (float)GetRandomValue(90, 100) / 100.0f;
+        meteorTextureIndex[i] = GetRandomValue(0, 7);
+        meteorRotation[i] = (float)GetRandomValue(-180, 180);
+        meteorRotationSpeed[i] = (float)GetRandomValue(-90, 90) / 2.0f;
     }
 
 
-    while (!WindowShouldClose() && !quitGame) {
+    while (!quitGame) {
 
         float dt = GetFrameTime();
+        if (WindowShouldClose() ||
+            (!exitConfirmation && IsKeyPressed(KEY_ESCAPE))) {
+            exitConfirmation = true;
+        }
+#if defined(PLATFORM_ANDROID)
+        if (!exitConfirmation && IsKeyPressed(KEY_BACK)) exitConfirmation = true;
+#endif
+
         if (collisionCooldown > 0.0f) collisionCooldown -= dt;
 
 
         Vector2 mouse = GetMousePosition();
         bool hover = CheckCollisionPointRec(mouse, quitButton);
-        if (hover && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) quitGame = true;
+
+        float panelWidth = (float)screenWidth * 0.70f;
+        float panelHeight = (float)screenHeight * 0.30f;
+        if (panelWidth > 420.0f) panelWidth = 420.0f;
+        if (panelHeight > 220.0f) panelHeight = 220.0f;
+        Rectangle exitPanel = {
+            ((float)screenWidth - panelWidth) * 0.5f,
+            ((float)screenHeight - panelHeight) * 0.5f,
+            panelWidth,
+            panelHeight
+        };
+        float buttonWidth = (panelWidth - 48.0f) * 0.5f;
+        Rectangle exitButton = {
+            exitPanel.x + 16.0f,
+            exitPanel.y + panelHeight - 64.0f,
+            buttonWidth,
+            48.0f
+        };
+        Rectangle stayButton = {
+            exitPanel.x + panelWidth - 16.0f - buttonWidth,
+            exitButton.y,
+            buttonWidth,
+            48.0f
+        };
+
+        if (!exitConfirmation && hover && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+            exitConfirmation = true;
+        }
+        if (exitConfirmation && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+            if (CheckCollisionPointRec(mouse, exitButton)) quitGame = true;
+            if (CheckCollisionPointRec(mouse, stayButton)) exitConfirmation = false;
+        }
 
        
 
 #if defined(PLATFORM_ANDROID)
+        touchWorldOffset = 0.0f;
         bool touchDown = GetTouchPointCount() > 0;
         Vector2 touchPosition = touchDown ? GetTouchPosition(0) : (Vector2){ -1.0f, -1.0f };
         bool touchHover = CheckCollisionPointRec(touchPosition, quitButton);
@@ -111,6 +169,7 @@ int main(){
             touchPrevious = touchPosition;
             touchHoldTime = 0.0f;
             touchMoved = false;
+            if (!exitConfirmation && touchHover) exitConfirmation = true;
         }
 
         if (touchDown && !touchHover) {
@@ -120,11 +179,7 @@ int main(){
             };
 
             if (touchMoved || fabsf(touchDelta.x) >= 3.0f * display.scale) {
-                float newX = pos.x + touchDelta.x;
-                if ((newX >= 0.0f) && (newX <= screenWidth - (ship.width * display.scale))) {
-                    pos.x = newX;
-                    posT.x = pos.x;
-                }
+                touchWorldOffset = -touchDelta.x;
                 touchMoved = true;
                 touchHoldTime = 0.0f;
             } else {
@@ -134,6 +189,11 @@ int main(){
             touchPrevious = touchPosition;
         } else if (!touchDown) {
             touchHoldTime = 0.0f;
+        }
+
+        if (exitConfirmation && !touchDown && touchWasDown) {
+            if (CheckCollisionPointRec(touchPrevious, exitButton)) quitGame = true;
+            if (CheckCollisionPointRec(touchPrevious, stayButton)) exitConfirmation = false;
         }
 
         touchWasDown = touchDown;
@@ -164,6 +224,9 @@ int main(){
                 if (boostActive) stars[i].y  += dt * speed * 0.2 + 0.5 * accel * dt * dt;
                 if (IsKeyDown(KEY_A))stars[i].x += dt * speed * 0.2;
                 if (IsKeyDown(KEY_D))stars[i].x -= dt * speed * 0.2;
+#if defined(PLATFORM_ANDROID)
+                stars[i].x += touchWorldOffset;
+#endif
              }
 
             // 2nd layer stars
@@ -180,6 +243,9 @@ int main(){
                 if (boostActive) stars2[i].y  += dt * speed * 0.4 + 0.5 * accel * dt * dt;
                 if (IsKeyDown(KEY_A))stars2[i].x += dt * speed * 0.4;
                 if (IsKeyDown(KEY_D))stars2[i].x -= dt * speed * 0.4;
+#if defined(PLATFORM_ANDROID)
+                stars2[i].x += touchWorldOffset;
+#endif
             }
             // 3rd  layer stars
             for (int i = 0; i < starCount; i++) {
@@ -194,6 +260,9 @@ int main(){
 
                 if (IsKeyDown(KEY_A))stars3[i].x += dt * speed * 0.6;
                 if (IsKeyDown(KEY_D))stars3[i].x -= dt * speed * 0.6;
+#if defined(PLATFORM_ANDROID)
+                stars3[i].x += touchWorldOffset;
+#endif
                 if (boostActive) {
                     stars3[i].y  += dt * speed * 0.6 + 0.5 * accel * dt * dt;
                 }
@@ -201,7 +270,9 @@ int main(){
 
             for (int i = 0; i < meteorCount; i++) {
 
-                DrawTextureEx(meteorText, meteor[i], 0.0f, meteorScale[i], GRAY);
+                Texture2D meteorTexture = meteorTextures[meteorTextureIndex[i]];
+                meteorRotation[i] += meteorRotationSpeed[i] * dt;
+                DrawTextureEx(meteorTexture, meteor[i], meteorRotation[i], meteorScale[i], GRAY);
 
                 meteor[i].y  += 1.0f;
                 if (meteor[i].y > screenHeight + 64) meteor[i].y = -64.0f;
@@ -211,6 +282,9 @@ int main(){
                 if (boostActive) meteor[i].y  += dt * speed + 0.5 * accel * dt * dt;
                 if (IsKeyDown(KEY_A))meteor[i].x += dt * speed;
                 if (IsKeyDown(KEY_D))meteor[i].x -= dt * speed;
+#if defined(PLATFORM_ANDROID)
+                meteor[i].x += touchWorldOffset;
+#endif
 
                 Rectangle shipBounds = {
                     pos.x,
@@ -218,11 +292,14 @@ int main(){
                     ship.width * display.scale,
                     ship.height * display.scale
                 };
+                float meteorWidth = meteorTexture.width * meteorScale[i];
+                float meteorHeight = meteorTexture.height * meteorScale[i];
+                const float meteorCollisionInset = 0.10f;
                 Rectangle meteorBounds = {
-                    meteor[i].x,
-                    meteor[i].y,
-                    meteorText.width * meteorScale[i],
-                    meteorText.height * meteorScale[i]
+                    meteor[i].x + meteorWidth * meteorCollisionInset,
+                    meteor[i].y + meteorHeight * meteorCollisionInset,
+                    meteorWidth * (1.0f - meteorCollisionInset * 2.0f),
+                    meteorHeight * (1.0f - meteorCollisionInset * 2.0f)
                 };
 
                 if ((shipHealth > 0) && (collisionCooldown <= 0.0f) &&
@@ -231,6 +308,9 @@ int main(){
                     collisionCooldown = 1.0f;
                     meteor[i].y = -64.0f;
                     meteor[i].x = (float)GetRandomValue(0, screenWidth - 1);
+                    meteorTextureIndex[i] = GetRandomValue(0, 7);
+                    meteorRotation[i] = (float)GetRandomValue(-180, 180);
+                    meteorRotationSpeed[i] = (float)GetRandomValue(-90, 90) / 2.0f;
                 }
              }
 
@@ -255,8 +335,27 @@ int main(){
             }
 
 
-             //DrawRectangleRec(quitButton, hover ? Fade(RED, 0.35f) : Fade(GRAY, 0.01f));
-            DrawTextureEx(crossButton, icon, 0.0f, display.scale, hover ? RED : WHITE);
+            if (exitConfirmation) {
+                DrawRectangle(0, 0, screenWidth, screenHeight, Fade(BLACK, 0.65f));
+                DrawRectangleRec(exitPanel, DARKGRAY);
+                DrawRectangleLinesEx(exitPanel, 2.0f, LIGHTGRAY);
+
+                const char *exitText = "Are you sure you want to exit?";
+                int fontSize = 20;
+                int textWidth = MeasureText(exitText, fontSize);
+                DrawText(exitText,
+                    (int)(exitPanel.x + (exitPanel.width - textWidth) * 0.5f),
+                    (int)(exitPanel.y + 45.0f), fontSize, WHITE);
+
+                DrawRectangleRec(exitButton, MAROON);
+                DrawRectangleRec(stayButton, GREEN);
+                DrawRectangleLinesEx(exitButton, 2.0f, LIGHTGRAY);
+                DrawRectangleLinesEx(stayButton, 2.0f, LIGHTGRAY);
+                DrawText("EXIT", (int)(exitButton.x + (exitButton.width - MeasureText("EXIT", 20)) * 0.5f),
+                    (int)(exitButton.y + 14.0f), 20, WHITE);
+                DrawText("STAY", (int)(stayButton.x + (stayButton.width - MeasureText("STAY", 20)) * 0.5f),
+                    (int)(stayButton.y + 14.0f), 20, WHITE);
+            }
         
 
         EndDrawing();
@@ -267,7 +366,9 @@ int main(){
     UnloadTexture(thrusterBoost);
     UnloadTexture(farAmbience);
     UnloadTexture(crossButton);
-    UnloadTexture(meteorText);
+    for (int i = 0; i < 8; i++) {
+        UnloadTexture(meteorTextures[i]);
+    }
     UnloadTexture(health);
     CloseAudioDevice();
     CloseWindow();
