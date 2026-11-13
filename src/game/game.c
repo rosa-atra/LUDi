@@ -8,8 +8,100 @@
 #include "game.h"
 #include "android_controls.h"
 
+static int LoadHighScore(void)
+{
+    const char *workingDirectory = GetWorkingDirectory();
+    if (workingDirectory == NULL || workingDirectory[0] == '\0') return 0;
+
+    char path[512];
+    snprintf(path, sizeof(path), "%s/space_high_score.txt", workingDirectory);
+    FILE *file = fopen(path, "r");
+    if (file == NULL) return 0;
+
+    int highScore = 0;
+    if (fscanf(file, "%d", &highScore) != 1 || highScore < 0) {
+        TraceLog(LOG_WARNING, "Invalid high score file: %s", path);
+        highScore = 0;
+    }
+    fclose(file);
+    return highScore;
+}
+
+static void SaveHighScore(int highScore)
+{
+    const char *workingDirectory = GetWorkingDirectory();
+    if (workingDirectory == NULL || workingDirectory[0] == '\0') {
+        TraceLog(LOG_WARNING, "Could not determine where to save the high score");
+        return;
+    }
+
+    char path[512];
+    snprintf(path, sizeof(path), "%s/space_high_score.txt", workingDirectory);
+    FILE *file = fopen(path, "w");
+    if (file == NULL) {
+        TraceLog(LOG_WARNING, "Could not save high score to %s", path);
+        return;
+    }
+
+    if (fprintf(file, "%d\n", highScore) < 0) {
+        TraceLog(LOG_WARNING, "Could not write high score to %s", path);
+    }
+    fclose(file);
+}
+
+static void DrawMenuButton(Rectangle button, const char *label, bool selected)
+{
+    Color fill = selected ? (Color){ 35, 115, 190, 255 } : (Color){ 25, 45, 70, 245 };
+    DrawRectangleRounded(button, 0.18f, 8, fill);
+    DrawRectangleRoundedLines(button, 0.18f, 8, selected ? SKYBLUE : LIGHTGRAY);
+    int fontSize = (int)(button.height * 0.42f);
+    int labelWidth = MeasureText(label, fontSize);
+    DrawText(label, (int)(button.x + (button.width - labelWidth) * 0.5f),
+        (int)(button.y + (button.height - fontSize) * 0.5f), fontSize, WHITE);
+}
+
+static void DrawMenuScreen(int screenWidth, int screenHeight, bool highScoreScreen,
+    int highScore, int selectedMenuOption, const Rectangle menuButtons[4],
+    Rectangle highScoreBackButton)
+{
+    BeginDrawing();
+    ClearBackground((Color){ 3, 8, 24, 255 });
+
+    const char *title = highScoreScreen ? "HIGH SCORES" : "SPACE ADVENTURE";
+    int titleFontSize = (int)((float)screenWidth * 0.09f);
+    if (titleFontSize > 48) titleFontSize = 48;
+    if (titleFontSize < 24) titleFontSize = 24;
+    int titleWidth = MeasureText(title, titleFontSize);
+    DrawText(title, (screenWidth - titleWidth) / 2, (int)(screenHeight * 0.14f),
+        titleFontSize, SKYBLUE);
+
+    if (highScoreScreen) {
+        const char *recordText = TextFormat("BEST SCORE: %d", highScore);
+        int recordFontSize = 28;
+        int recordWidth = MeasureText(recordText, recordFontSize);
+        DrawText(recordText, (screenWidth - recordWidth) / 2,
+            (int)(screenHeight * 0.43f), recordFontSize, GOLD);
+        DrawMenuButton(highScoreBackButton, "BACK",
+            CheckCollisionPointRec(GetMousePosition(), highScoreBackButton));
+    } else {
+        const char *labels[4] = { "CONTINUE", "NEW GAME", "HIGH SCORES", "EXIT" };
+        for (int i = 0; i < 4; i++) {
+            bool selected = i == selectedMenuOption ||
+                CheckCollisionPointRec(GetMousePosition(), menuButtons[i]);
+            DrawMenuButton(menuButtons[i], labels[i], selected);
+        }
+        const char *recordText = TextFormat("HIGH SCORE: %d", highScore);
+        int recordWidth = MeasureText(recordText, 18);
+        DrawText(recordText, (screenWidth - recordWidth) / 2,
+            (int)(screenHeight * 0.91f), 18, LIGHTGRAY);
+    }
+
+    EndDrawing();
+}
+
 int RunGame(void){
     InitGameDisplay("SPACE ADVENTURE");
+    SetGesturesEnabled(GESTURE_TAP);
     AndroidDisplayConfig display = GetGameDisplayConfig();
     const int screenWidth = display.width;
     const int screenHeight = display.height;
@@ -69,13 +161,20 @@ int RunGame(void){
         (screenHeight * (2.0f / 3.0f)) - (ship.height * display.scale * 0.5f)
     };
     Vector2 thrusterPositionOffset = { shipPositionOffset.x, shipPositionOffset.y + (60.0f * display.scale) };
-    Vector2 hTelemetry = {0.0f , 0.0f};
-
     const float speed = 100.0f;
     const float accel = 100.0f;
     bool quitGame = false;
     bool exitConfirmation = false;
     bool gameOver = false;
+    bool mainMenu = true;
+    bool highScoreScreen = false;
+    bool menuHasBeenShown = false;
+    bool menuTouchWasDown = false;
+    Vector2 menuTouchPosition = { -1.0f, -1.0f };
+    bool resetGameRequested = false;
+    int selectedMenuOption = 0;
+    int score = 0;
+    int highScore = LoadHighScore();
     bool yellowThrusterActive = false;
     bool blueThrusterActive = false;
     int shipHealth = 6;
@@ -83,12 +182,8 @@ int RunGame(void){
     float shipHealthBar = 100.0f;
     const float maxShipHealthBar = 100.0f;
     float shipFuel = 200.0f;
-    float shipAmmo = 100.0f;
     const float maxShipFuel = 200.0f;
-    const float maxShipAmmo = 100.0f;
     float collisionCooldown = 0.0f;
-    float shipWorldX = 0.0f;
-    float shipWorldY = 0.0f;
     float shipVelocity = 10.0f;
 
 
@@ -191,12 +286,206 @@ int RunGame(void){
     while (!quitGame) {
 
         float dt = GetFrameTime();
-        if (WindowShouldClose() ||
-            (!exitConfirmation && IsKeyPressed(KEY_ESCAPE))) {
+        if (WindowShouldClose()) {
             exitConfirmation = true;
         }
-        if (!exitConfirmation && AndroidControlsBackPressed()) exitConfirmation = true;
-        bool gamePaused = exitConfirmation || gameOver;
+        if (!exitConfirmation && IsKeyPressed(KEY_ESCAPE)) {
+            if (highScoreScreen) {
+                highScoreScreen = false;
+                mainMenu = true;
+            } else if (mainMenu) {
+                exitConfirmation = true;
+            } else if (!gameOver) {
+                mainMenu = true;
+            }
+        }
+        if (!exitConfirmation && AndroidControlsBackPressed()) {
+            if (highScoreScreen) {
+                highScoreScreen = false;
+                mainMenu = true;
+            } else if (mainMenu) {
+                exitConfirmation = true;
+            } else if (!gameOver) {
+                mainMenu = true;
+            }
+        }
+
+        const int menuOptionCount = 4;
+#if defined(PLATFORM_ANDROID)
+        float menuButtonWidth = (float)screenWidth * 0.78f;
+        if (menuButtonWidth > 960.0f) menuButtonWidth = 960.0f;
+        if (menuButtonWidth < 220.0f) menuButtonWidth = (float)screenWidth - 24.0f;
+        float menuButtonHeight = (float)screenHeight * 0.095f;
+        if (menuButtonHeight > 120.0f) menuButtonHeight = 120.0f;
+        if (menuButtonHeight < 72.0f) menuButtonHeight = 72.0f;
+        float menuButtonGap = 18.0f;
+#else
+        float menuButtonWidth = (float)screenWidth * 0.68f;
+        if (menuButtonWidth > 380.0f) menuButtonWidth = 380.0f;
+        if (menuButtonWidth < 220.0f) menuButtonWidth = (float)screenWidth - 24.0f;
+        float menuButtonHeight = (float)screenHeight * 0.075f;
+        if (menuButtonHeight > 54.0f) menuButtonHeight = 54.0f;
+        if (menuButtonHeight < 34.0f) menuButtonHeight = 34.0f;
+        float menuButtonGap = 10.0f;
+#endif
+        float menuFirstButtonY = (float)screenHeight * 0.40f;
+#if defined(PLATFORM_ANDROID)
+        menuFirstButtonY = (float)screenHeight * 0.30f;
+#endif
+        if (menuFirstButtonY + (menuButtonHeight + menuButtonGap) * menuOptionCount > screenHeight - 8.0f) {
+            menuFirstButtonY = (float)screenHeight -
+                (menuButtonHeight + menuButtonGap) * menuOptionCount - 8.0f;
+        }
+        Rectangle menuButtons[menuOptionCount];
+        for (int i = 0; i < menuOptionCount; i++) {
+            menuButtons[i] = (Rectangle){
+                ((float)screenWidth - menuButtonWidth) * 0.5f,
+                menuFirstButtonY + (menuButtonHeight + menuButtonGap) * (float)i,
+                menuButtonWidth,
+                menuButtonHeight
+            };
+        }
+        Rectangle highScoreBackButton = {
+            ((float)screenWidth - menuButtonWidth) * 0.5f,
+            (float)screenHeight * 0.68f,
+            menuButtonWidth,
+            menuButtonHeight
+        };
+        bool touchDown = GetTouchPointCount() > 0;
+        Vector2 touchPosition = touchDown ? GetTouchPosition(0) : (Vector2){ -1.0f, -1.0f };
+        bool touchPressed = touchDown && !menuTouchWasDown;
+        bool touchReleased = !touchDown && menuTouchWasDown;
+        if (touchDown) menuTouchPosition = touchPosition;
+        menuTouchWasDown = touchDown;
+        bool menuTap = touchPressed || IsMouseButtonPressed(MOUSE_BUTTON_LEFT) ||
+            IsGestureDetected(GESTURE_TAP);
+        bool menuClick = menuTap || IsMouseButtonReleased(MOUSE_BUTTON_LEFT) || touchReleased;
+        Vector2 menuPointer = touchPressed ? touchPosition :
+            (touchReleased ? menuTouchPosition : GetMousePosition());
+#if defined(PLATFORM_ANDROID)
+        if (menuClick) {
+            Vector2 lastTouchPosition = GetTouchPosition(0);
+            if (lastTouchPosition.x >= 0.0f && lastTouchPosition.x < (float)screenWidth &&
+                lastTouchPosition.y >= 0.0f && lastTouchPosition.y < (float)screenHeight) {
+                menuPointer = lastTouchPosition;
+            }
+        }
+#endif
+
+        if (!exitConfirmation && mainMenu && !highScoreScreen && menuHasBeenShown) {
+            if (IsKeyPressed(KEY_DOWN)) selectedMenuOption = (selectedMenuOption + 1) % menuOptionCount;
+            if (IsKeyPressed(KEY_UP)) selectedMenuOption =
+                (selectedMenuOption + menuOptionCount - 1) % menuOptionCount;
+
+            int activatedOption = -1;
+            if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) {
+                activatedOption = selectedMenuOption;
+            } else if (menuClick) {
+                for (int i = 0; i < menuOptionCount; i++) {
+                    Rectangle hitArea = menuButtons[i];
+#if defined(PLATFORM_ANDROID)
+                    hitArea.x = 0.0f;
+                    hitArea.width = (float)screenWidth;
+                    hitArea.y -= menuButtonGap * 0.5f;
+                    hitArea.height += menuButtonGap;
+#endif
+                    if (CheckCollisionPointRec(menuPointer, hitArea)) {
+                        activatedOption = i;
+                        selectedMenuOption = i;
+                        break;
+                    }
+                }
+            }
+
+            if (activatedOption == 0) {
+                mainMenu = false;
+            } else if (activatedOption == 1) {
+                resetGameRequested = true;
+                mainMenu = false;
+                gameOver = false;
+            } else if (activatedOption == 2) {
+                highScoreScreen = true;
+                mainMenu = false;
+            } else if (activatedOption == 3) {
+                quitGame = true;
+            }
+        } else if (!exitConfirmation && highScoreScreen && menuHasBeenShown &&
+            (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER) ||
+             menuClick)) {
+            Rectangle backHitArea = highScoreBackButton;
+#if defined(PLATFORM_ANDROID)
+            backHitArea.x = 0.0f;
+            backHitArea.width = (float)screenWidth;
+            backHitArea.y -= menuButtonGap * 0.5f;
+            backHitArea.height += menuButtonGap;
+#endif
+            if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER) ||
+                CheckCollisionPointRec(menuPointer, backHitArea)) {
+                highScoreScreen = false;
+                mainMenu = true;
+            }
+        }
+
+        if (resetGameRequested) {
+            score = 0;
+            shipHealth = maxShipHealth;
+            shipHealthBar = maxShipHealthBar;
+            shipFuel = maxShipFuel;
+            shipPositionOffset.x =
+                (screenWidth - ship.width * display.scale) * 0.5f;
+            thrusterPositionOffset.x = shipPositionOffset.x;
+            collisionCooldown = 0.0f;
+            plasmaFireCooldown = 0.0f;
+            shipVelocity = 10.0f;
+            activeGameplayTime = 0.0f;
+            stationNumber = 1;
+            stationActive = true;
+            stationHealthRefilled = false;
+            stationTextureIndex = GetRandomValue(0, 2);
+            stationPosition = (Vector2){
+                (screenWidth - stationTextures[stationTextureIndex].width * display.scale * stationScaleFactor) * 0.5f,
+                screenHeight * 0.24f
+            };
+            meteorCount = 0;
+            enemyCount = 4;
+            yellowThrusterActive = false;
+            blueThrusterActive = false;
+            for (int i = 0; i < maxMeteorCount; i++) {
+                meteor[i] = (Vector2){
+                    (float)GetRandomValue(0, screenWidth - 1),
+                    (float)GetRandomValue(0, screenHeight - 1)
+                };
+                meteorScale[i] = (float)GetRandomValue(90, 100) / 100.0f;
+                meteorTextureIndex[i] = GetRandomValue(0, 7);
+                meteorRotation[i] = (float)GetRandomValue(-180, 180);
+                meteorRotationSpeed[i] = (float)GetRandomValue(-90, 90) / 2.0f;
+                meteorActive[i] = false;
+            }
+            for (int i = 0; i < maxEnemyCount; i++) {
+                enemies[i] = (Vector2){
+                    (float)GetRandomValue(40, screenWidth - 40),
+                    (float)GetRandomValue(-400, -80)
+                };
+                enemyScale[i] = (float)GetRandomValue(55, 85) / 100.0f;
+                enemyTextureIndex[i] = GetRandomValue(0, 4);
+                enemyShootTimer[i] = (float)GetRandomValue(8, 25) / 10.0f;
+                enemyHorizontalSpeed[i] = (float)GetRandomValue(-55, 55);
+                enemyActive[i] = i < enemyCount;
+            }
+            for (int i = 0; i < maxEnemyBolts; i++) enemyBoltLife[i] = 0.0f;
+            for (int i = 0; i < maxPlasmaBolts; i++) plasmaBolts[i].life = 0.0f;
+            gameOver = false;
+            resetGameRequested = false;
+        }
+
+        if ((mainMenu || highScoreScreen) && !exitConfirmation) {
+            DrawMenuScreen(screenWidth, screenHeight, highScoreScreen, highScore,
+                selectedMenuOption, menuButtons, highScoreBackButton);
+            menuHasBeenShown = true;
+            continue;
+        }
+
+        bool gamePaused = exitConfirmation || gameOver || mainMenu || highScoreScreen;
         if (gamePaused) dt = 0.0f;
 
         if (collisionCooldown > 0.0f) collisionCooldown -= dt;
@@ -269,29 +558,7 @@ int RunGame(void){
         if (gameOver && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
             if (CheckCollisionPointRec(mouse, exitButton)) quitGame = true;
             if (CheckCollisionPointRec(mouse, stayButton)) {
-                shipHealth = maxShipHealth;
-                shipHealthBar = maxShipHealthBar;
-                shipFuel = maxShipFuel;
-                shipAmmo = maxShipAmmo;
-                collisionCooldown = 0.0f;
-                shipWorldX = 0.0f;
-                shipWorldY = 0.0f;
-                shipVelocity = 0.0f;
-                activeGameplayTime = 0.0f;
-                stationNumber = 1;
-                stationActive = true;
-                stationHealthRefilled = false;
-                stationTextureIndex = GetRandomValue(0, 2);
-                stationPosition = (Vector2){
-                    (screenWidth - stationTextures[stationTextureIndex].width * display.scale * stationScaleFactor) * 0.5f,
-                    screenHeight * 0.24f
-                };
-                for (int i = 0; i < meteorCount; i++) {
-                    meteor[i].x = (float)GetRandomValue(0, screenWidth - 1);
-                    meteor[i].y = (float)GetRandomValue(0, screenHeight - 1);
-                    meteorRotation[i] = (float)GetRandomValue(-180, 180);
-                    meteorRotationSpeed[i] = (float)GetRandomValue(-90, 90) / 2.0f;
-                }
+                resetGameRequested = true;
                 gameOver = false;
             }
         }
@@ -299,6 +566,17 @@ int RunGame(void){
        
 
         AndroidControlsUpdate(&androidControls, dt, gamePaused, quitButton);
+        float shipHorizontalInput = 0.0f;
+        if (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT)) shipHorizontalInput -= 1.0f;
+        if (IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT)) shipHorizontalInput += 1.0f;
+        if (!gamePaused) {
+            shipPositionOffset.x += shipHorizontalInput * 420.0f * display.scale * dt;
+            shipPositionOffset.x += androidControls.moveX * 1.35f;
+            float shipMaxX = screenWidth - ship.width * display.scale;
+            if (shipPositionOffset.x < 0.0f) shipPositionOffset.x = 0.0f;
+            if (shipPositionOffset.x > shipMaxX) shipPositionOffset.x = shipMaxX;
+            thrusterPositionOffset.x = shipPositionOffset.x;
+        }
         yellowThrusterActive = !gamePaused &&
             (androidControls.speedUp || IsKeyDown(KEY_UP));
         blueThrusterActive = !gamePaused &&
@@ -318,20 +596,7 @@ int RunGame(void){
             !androidControls.touchDown && androidControls.touchWasDown) {
             if (CheckCollisionPointRec(androidControls.touchPrevious, exitButton)) quitGame = true;
             if (CheckCollisionPointRec(androidControls.touchPrevious, stayButton)) {
-                shipHealth = maxShipHealth;
-                shipHealthBar = maxShipHealthBar;
-                shipFuel = maxShipFuel;
-                shipAmmo = maxShipAmmo;
-                collisionCooldown = 0.0f;
-                shipWorldX = 0.0f;
-                shipWorldY = 0.0f;
-                shipVelocity = 0.0f;
-                for (int i = 0; i < meteorCount; i++) {
-                    meteor[i].x = (float)GetRandomValue(0, screenWidth - 1);
-                    meteor[i].y = (float)GetRandomValue(0, screenHeight - 1);
-                    meteorRotation[i] = (float)GetRandomValue(-180, 180);
-                    meteorRotationSpeed[i] = (float)GetRandomValue(-90, 90) / 2.0f;
-                }
+                resetGameRequested = true;
                 gameOver = false;
             }
         }
@@ -361,21 +626,9 @@ int RunGame(void){
                 if (shipVelocity < 0.0f) shipVelocity = 0.0f;
             }
 
-            float forwardMovement = shipVelocity * dt;
-            float worldMovementX = 0.0f;
-            if (shipVelocity > 0.0f) {
-                if (IsKeyDown(KEY_A)) worldMovementX -= speed * dt;
-                if (IsKeyDown(KEY_D)) worldMovementX += speed * dt;
-                float tilt = AndroidControlsTilt();
-                if (tilt < -0.08f) worldMovementX -= speed * fabsf(tilt) * dt;
-                else if (tilt > 0.08f) worldMovementX += speed * fabsf(tilt) * dt;
-            }
-
-            shipWorldX += worldMovementX;
-            shipWorldY += forwardMovement;
         }
 
-        if (!gamePaused && plasmaFireCooldown <= 0.0f && shipAmmo >= 1.0f &&
+        if (!gamePaused && plasmaFireCooldown <= 0.0f &&
             (IsKeyDown(KEY_X) || IsKeyDown(KEY_W) || androidControls.fireTapped ||
              (!androidControls.available && IsMouseButtonDown(MOUSE_BUTTON_LEFT)))) {
             for (int bolt = 0; bolt < maxPlasmaBolts; bolt++) {
@@ -386,7 +639,6 @@ int RunGame(void){
                     plasmaBolts[bolt].position = (Vector2){ muzzleX, muzzleY };
                     plasmaBolts[bolt].velocity = (Vector2){ 0.0f, -720.0f * display.scale };
                     plasmaBolts[bolt].life = 1.6f;
-                    shipAmmo -= 1.0f;
                     PlaySound(plasmaSound);
                     break;
                 }
@@ -497,7 +749,6 @@ int RunGame(void){
                 verticalDistance < (stationHeight + ship.height * display.scale) * 0.5f) {
                 shipHealth = maxShipHealth;
                 shipHealthBar = maxShipHealthBar;
-                shipAmmo = maxShipAmmo;
                 stationHealthRefilled = true;
             }
         }
@@ -565,9 +816,6 @@ int RunGame(void){
                 if (!gamePaused && meteor[i].x <= -64) {meteor[i].x = screenWidth; meteor[i].y = (float)GetRandomValue(0, screenHeight - 1);}
                 if (!gamePaused && meteor[i].x > screenWidth) meteor[i].x = -64.0f;
 
-                if (!gamePaused && shipVelocity > 0.0f && IsKeyDown(KEY_A)) meteor[i].x += dt * speed;
-                if (!gamePaused && shipVelocity > 0.0f && IsKeyDown(KEY_D)) meteor[i].x -= dt * speed;
-
                 const float shipCollisionInset = 0.10f;
                 float shipWidth = ship.width * display.scale;
                 float shipHeight = ship.height * display.scale;
@@ -604,9 +852,7 @@ int RunGame(void){
                         plasmaBolts[bolt].life = 0.0f;
                         PlaySound(meteorExplosionSound);
                         shipFuel += 2.0f;
-                        shipAmmo += 2.0f;
                         if (shipFuel > maxShipFuel) shipFuel = maxShipFuel;
-                        if (shipAmmo > maxShipAmmo) shipAmmo = maxShipAmmo;
                         meteor[i].y = -64.0f;
                         meteor[i].x = (float)GetRandomValue(0, screenWidth - 1);
                         meteorTextureIndex[i] = GetRandomValue(0, 7);
@@ -662,13 +908,16 @@ int RunGame(void){
                         6.0f * display.scale,
                         16.0f * display.scale
                     };
-                    if (CheckCollisionRecs(enemyBounds, boltBounds)) {
+                    if (!gamePaused && CheckCollisionRecs(enemyBounds, boltBounds)) {
                         plasmaBolts[bolt].life = 0.0f;
+                        score += 100;
+                        if (score > highScore) {
+                            highScore = score;
+                            SaveHighScore(highScore);
+                        }
                         enemies[i].y = (float)GetRandomValue(-300, -60);
                         enemies[i].x = (float)GetRandomValue(40, screenWidth - 40);
                         enemyTextureIndex[i] = GetRandomValue(0, 4);
-                        shipAmmo += 1.0f;
-                        if (shipAmmo > maxShipAmmo) shipAmmo = maxShipAmmo;
                         PlaySound(meteorExplosionSound);
                         break;
                     }
@@ -687,8 +936,6 @@ int RunGame(void){
                 float stationScale = display.scale * stationScaleFactor;
                 if (!gamePaused) {
                     stationPosition.y += environmentDistance;
-                    if (shipVelocity > 0.0f && IsKeyDown(KEY_A)) stationPosition.x += speed * dt;
-                    if (shipVelocity > 0.0f && IsKeyDown(KEY_D)) stationPosition.x -= speed * dt;
                     float stationWidth = stationTextures[stationTextureIndex].width * stationScale;
                     if (stationPosition.x < -stationWidth) stationPosition.x = screenWidth;
                     if (stationPosition.x > screenWidth) stationPosition.x = -stationWidth;
@@ -721,6 +968,9 @@ int RunGame(void){
             const int hudX = 10;
             const float healthBarWidth = 180.0f;
             const float healthBarHeight = 16.0f;
+            const char *scoreText = TextFormat("SCORE: %d", score);
+            DrawText(scoreText,
+                screenWidth - MeasureText(scoreText, 22) - 16, display.quitSize + 8, 22, GOLD);
             DrawRectangle(hudX, 10, (int)healthBarWidth, (int)healthBarHeight, DARKGRAY);
             DrawRectangle(hudX, 10, (int)(healthBarWidth * (shipHealthBar / maxShipHealthBar)), (int)healthBarHeight,
                 shipHealthBar > 50.0f ? GREEN : (shipHealthBar > 25.0f ? ORANGE : RED));
@@ -733,30 +983,16 @@ int RunGame(void){
             DrawRectangleLines(hudX, fuelY, (int)healthBarWidth, (int)healthBarHeight, WHITE);
             DrawText("FUEL", hudX + 184, fuelY, 16, WHITE);
 
-            int ammoY = 50;
-            DrawRectangle(hudX, ammoY, (int)healthBarWidth, (int)healthBarHeight, DARKGRAY);
-            DrawRectangle(hudX, ammoY, (int)(healthBarWidth * shipAmmo / maxShipAmmo), (int)healthBarHeight, ORANGE);
-            DrawRectangleLines(hudX, ammoY, (int)healthBarWidth, (int)healthBarHeight, WHITE);
-            DrawText("AMMO", hudX + 184, ammoY, 16, WHITE);
-
-            hTelemetry.x = 2.0f ;//(float)hudX;
-            hTelemetry.y = 70.0f;
             for (int i = 0; i < maxShipHealth; i++){
+                Vector2 healthPosition = { (float)(i * 32 + 2), 70.0f };
                 if (i < shipHealth) {
-                    DrawTextureEx(health, hTelemetry,0.0f,0.5f, WHITE);
+                    DrawTextureEx(health, healthPosition, 0.0f, 0.5f, WHITE);
                 }
-                hTelemetry.x = (i + 1) * 32.0f;
             }
-
-            int telemetryY = 70 + health.height + 8;
-            DrawText(TextFormat("X: %.0f  Y: %.0f", shipWorldX, shipWorldY),
-                hudX, telemetryY, 20, LIGHTGRAY);
-            DrawText(TextFormat("Velocity: %.0f u/s", shipVelocity),
-                hudX, telemetryY + 22, 20, LIGHTGRAY);
 
             AndroidControlsDraw(&androidControls, gamePaused);
 
-            if (exitConfirmation || gameOver) {
+            if (exitConfirmation || (gameOver && !mainMenu)) {
                 DrawRectangle(0, 0, screenWidth, screenHeight, Fade(BLACK, 0.65f));
                 DrawRectangleRec(exitPanel, DARKGRAY);
                 DrawRectangleLinesEx(exitPanel, 2.0f, LIGHTGRAY);

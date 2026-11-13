@@ -2,12 +2,6 @@
 #include <math.h>
 
 #if defined(PLATFORM_ANDROID)
-#include <android/looper.h>
-#include <android/sensor.h>
-
-static ALooper *accelerometerLooper = NULL;
-static ASensorEventQueue *accelerometerQueue = NULL;
-static volatile float accelerometerX = 0.0f;
 static float controlRadius = 0.0f;
 static Vector2 fireButtonCenter = { 0.0f, 0.0f };
 static bool fireWasPressed = false;
@@ -17,37 +11,6 @@ static bool doubleTapCandidate = false;
 static float touchHoldDuration = 0.0f;
 static float lastTapReleaseTime = 0.0f;
 static float touchControlTime = 0.0f;
-
-static void InitAccelerometer(void)
-{
-    ASensorManager *sensorManager = ASensorManager_getInstance();
-    if (sensorManager == NULL) return;
-
-    const ASensor *accelerometer = ASensorManager_getDefaultSensor(sensorManager, ASENSOR_TYPE_ACCELEROMETER);
-    if (accelerometer == NULL) return;
-
-    accelerometerLooper = ALooper_prepare(ALOOPER_PREPARE_ALLOW_NON_CALLBACKS);
-    accelerometerQueue = ASensorManager_createEventQueue(sensorManager, accelerometerLooper, 1, NULL, NULL);
-    if (accelerometerQueue == NULL) return;
-
-    ASensorEventQueue_setEventRate(accelerometerQueue, accelerometer, 10000);
-    ASensorEventQueue_enableSensor(accelerometerQueue, accelerometer);
-}
-
-static void UpdateAccelerometer(void)
-{
-    if (accelerometerLooper == NULL || accelerometerQueue == NULL) return;
-
-    int ident = 0;
-    while (ALooper_pollOnce(0, &ident, NULL, NULL) >= 0) {
-        if (ident != 1) continue;
-        ASensorEvent events[8];
-        ssize_t count = ASensorEventQueue_getEvents(accelerometerQueue, events, 8);
-        for (ssize_t i = 0; i < count; i++) {
-            if (events[i].type == ASENSOR_TYPE_ACCELEROMETER) accelerometerX = events[i].data[0];
-        }
-    }
-}
 #endif
 
 void AndroidControlsInit(AndroidControls *controls, int screenWidth, int screenHeight)
@@ -56,11 +19,11 @@ void AndroidControlsInit(AndroidControls *controls, int screenWidth, int screenH
     controls->available = true;
     controls->lastTouchPosition = (Vector2){ -1.0f, -1.0f };
     controls->touchPrevious = (Vector2){ 0.0f, 0.0f };
+    controls->movementTouchPrevious = (Vector2){ 0.0f, 0.0f };
     controlRadius = fminf((float)screenWidth, (float)screenHeight) * 0.15f;
     if (controlRadius < 80.0f) controlRadius = 80.0f;
     if (controlRadius > 120.0f) controlRadius = 120.0f;
     fireButtonCenter = (Vector2){ screenWidth - controlRadius * 1.65f, screenHeight * 0.67f };
-    InitAccelerometer();
 #else
     (void)screenWidth;
     (void)screenHeight;
@@ -72,10 +35,12 @@ void AndroidControlsUpdate(AndroidControls *controls, float dt, bool gamePaused,
 {
 #if defined(PLATFORM_ANDROID)
     (void)quitButton;
-    UpdateAccelerometer();
     controls->touchDown = false;
     controls->touchControlDown = false;
     controls->firePressed = false;
+    controls->moveX = 0.0f;
+    Vector2 movementTouchPosition = { 0.0f, 0.0f };
+    bool movementTouchDown = false;
 
     int touchCount = GetTouchPointCount();
     controls->touchDown = touchCount > 0;
@@ -85,8 +50,22 @@ void AndroidControlsUpdate(AndroidControls *controls, float dt, bool gamePaused,
         float dx = position.x - fireButtonCenter.x;
         float dy = position.y - fireButtonCenter.y;
         if (dx * dx + dy * dy <= controlRadius * controlRadius) controls->firePressed = true;
-        else controls->touchControlDown = true;
+        else {
+            controls->touchControlDown = true;
+            if (!movementTouchDown) {
+                movementTouchPosition = position;
+                movementTouchDown = true;
+            }
+        }
     }
+
+    if (!gamePaused && movementTouchDown && controls->movementTouchWasDown) {
+        controls->moveX = movementTouchPosition.x - controls->movementTouchPrevious.x;
+        if (controls->moveX > 80.0f) controls->moveX = 80.0f;
+        if (controls->moveX < -80.0f) controls->moveX = -80.0f;
+    }
+    if (movementTouchDown) controls->movementTouchPrevious = movementTouchPosition;
+    controls->movementTouchWasDown = movementTouchDown;
 
     controls->fireTapped = controls->firePressed && !fireWasPressed;
     fireWasPressed = controls->firePressed;
@@ -134,6 +113,7 @@ void AndroidControlsUpdate(AndroidControls *controls, float dt, bool gamePaused,
     (void)dt;
     (void)gamePaused;
     (void)quitButton;
+    controls->moveX = 0.0f;
 #endif
 }
 
@@ -153,15 +133,6 @@ void AndroidControlsDraw(const AndroidControls *controls, bool gamePaused)
 #else
     (void)controls;
     (void)gamePaused;
-#endif
-}
-
-float AndroidControlsTilt(void)
-{
-#if defined(PLATFORM_ANDROID)
-    return accelerometerX / 9.81f;
-#else
-    return 0.0f;
 #endif
 }
 
